@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trading Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:#0d1117; --surface:#161b22; --surface2:#1c2230; --border:#21262d;
+      --text:#e6edf3; --muted:#8b949e;
+      --green:#3fb950; --red:#f85149; --yellow:#d29922;
+      --blue:#58a6ff; --purple:#bc8cff; --orange:#ffa657; --teal:#39d353;
+      --inr:#f0a500; --usd:#3b82f6;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh;}
+    ::-webkit-scrollbar{width:5px;height:5px;}
+    ::-webkit-scrollbar-track{background:var(--bg);}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;}
+    .card2{background:var(--surface2);border:1px solid var(--border);border-radius:8px;}
+
+    /* Account column headers */
+    .col-inr{border-top:3px solid var(--inr);}
+    .col-usd{border-top:3px solid var(--usd);}
+    .label-inr{color:var(--inr);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;}
+    .label-usd{color:var(--usd);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;}
+
+    .stat-val{font-size:22px;font-weight:700;line-height:1.2;margin-top:4px;}
+    .stat-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+
+    .pos{color:var(--green);} .neg{color:var(--red);} .muted{color:var(--muted);}
+
+    table{width:100%;border-collapse:collapse;font-size:12.5px;}
+    thead tr{border-bottom:1px solid var(--border);}
+    th{padding:9px 10px;color:var(--muted);font-weight:500;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.4px;}
+    td{padding:9px 10px;border-bottom:1px solid rgba(33,38,45,.5);vertical-align:middle;}
+    tr:last-child td{border-bottom:none;}
+    tr:hover td{background:rgba(255,255,255,.02);}
+
+    .badge{font-size:11px;padding:2px 7px;border-radius:4px;display:inline-block;white-space:nowrap;}
+    .buy{background:rgba(63,185,80,.15);color:var(--green);}
+    .sell{background:rgba(248,81,73,.15);color:var(--red);}
+    .b-kraken{background:#0d1f38;color:var(--blue);}
+    .b-spot{background:#0d1a2e;color:var(--purple);}
+    .b-fut{background:#2a1800;color:var(--inr);}
+    .maker{background:rgba(63,185,80,.1);color:var(--green);font-size:10px;padding:1px 5px;border-radius:3px;}
+    .taker{background:rgba(248,81,73,.1);color:var(--red);font-size:10px;padding:1px 5px;border-radius:3px;}
+
+    .tab-btn{padding:7px 14px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;color:var(--muted);background:transparent;border:none;transition:all .15s;}
+    .tab-btn.active{background:var(--surface2);color:var(--text);}
+
+    .cur-btn{padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;}
+    .cur-btn.active-inr{color:var(--inr);border-color:var(--inr);background:rgba(240,165,0,.08);}
+    .cur-btn.active-usd{color:var(--usd);border-color:var(--usd);background:rgba(59,130,246,.08);}
+    .cur-btn.active-all{color:var(--text);border-color:var(--border);background:var(--surface2);}
+
+    select,input{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;font-size:12px;outline:none;}
+    select:focus{border-color:var(--blue);}
+
+    .divider{height:1px;background:var(--border);margin:16px 0;}
+    .empty{text-align:center;padding:40px 24px;color:var(--muted);font-size:13px;}
+
+    @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+    .spinning{animation:spin 1s linear;}
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav style="background:var(--surface);border-bottom:1px solid var(--border);" class="px-6 py-3 flex items-center justify-between sticky top-0 z-50">
+  <div class="flex items-center gap-3">
+    <div style="width:30px;height:30px;background:linear-gradient(135deg,#f0a500,#3b82f6);border-radius:8px;" class="flex items-center justify-center font-bold text-sm text-white">T</div>
+    <span class="font-semibold">Trading Dashboard</span>
+    <span style="font-size:11px;padding:2px 8px;border-radius:20px;background:rgba(63,185,80,.12);color:var(--green);border:1px solid rgba(63,185,80,.25)">● LIVE</span>
+  </div>
+  <div class="flex items-center gap-3">
+    <span id="last-updated" class="muted" style="font-size:12px">Updating…</span>
+    <select id="days-select" onchange="refreshAll()">
+      <option value="7">7 days</option>
+      <option value="30" selected>30 days</option>
+      <option value="90">90 days</option>
+    </select>
+    <button onclick="refreshAll()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;">
+      <svg id="refresh-icon" width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      Refresh
+    </button>
+  </div>
+</nav>
+
+<div class="px-6 py-5" style="max-width:1600px;margin:0 auto;">
+
+  <!-- ACCOUNT COLUMNS HEADER -->
+  <div class="grid grid-cols-2 gap-4 mb-5">
+    <div class="card col-inr p-4">
+      <div class="label-inr mb-1">₹ INR Margin Account</div>
+      <div class="muted" style="font-size:12px">CoinDCX Futures · INR margin · USDT-priced instruments</div>
+    </div>
+    <div class="card col-usd p-4">
+      <div class="label-usd mb-1">$ USD / USDT Account</div>
+      <div class="muted" style="font-size:12px">Kraken (USD) · CoinDCX Spot (USDT)</div>
+    </div>
+  </div>
+
+  <!-- HEADLINE STATS — TWO COLUMNS -->
+  <div class="grid grid-cols-2 gap-4 mb-5">
+
+    <!-- INR stats -->
+    <div class="grid grid-cols-5 gap-3">
+      <div class="card2 p-4" style="border-left:3px solid var(--inr)">
+        <div class="label-inr">Net P&amp;L</div>
+        <div class="stat-val" id="inr-netpnl" style="font-size:20px">—</div>
+        <div class="stat-sub">USDT · realized + unrealized − fees</div>
+      </div>
+      <div class="card2 p-4">
+        <div class="label-inr">Realized P&amp;L</div>
+        <div class="stat-val" id="inr-rpnl" style="font-size:18px">—</div>
+        <div class="stat-sub">USDT · closed positions</div>
+      </div>
+      <div class="card2 p-4">
+        <div class="label-inr">Unrealized P&amp;L</div>
+        <div class="stat-val" id="inr-upnl" style="font-size:18px">—</div>
+        <div class="stat-sub">USDT · open MTM</div>
+      </div>
+      <div class="card2 p-4">
+        <div class="label-inr">Fees Paid</div>
+        <div class="stat-val" style="color:var(--red);font-size:18px" id="inr-fees">—</div>
+        <div class="stat-sub">USDT · <span id="inr-trades">—</span> trades</div>
+      </div>
+      <div class="card2 p-4">
+        <div class="label-inr">Margin (INR)</div>
+        <div class="stat-val" style="color:var(--inr);font-size:18px" id="inr-margin">—</div>
+        <div class="stat-sub">INR posted as collateral</div>
+      </div>
+    </div>
+
+    <!-- USD stats -->
+    <div class="grid grid-cols-3 gap-3">
+      <div class="card2 p-4">
+        <div class="label-usd">Portfolio Value</div>
+        <div class="stat-val" style="color:var(--usd)" id="usd-value">—</div>
+        <div class="stat-sub" id="usd-margin-detail">USD · Kraken margin + DCX Spot</div>
+      </div>
+      <div class="card2 p-4">
+        <div class="label-usd">Realized P&amp;L</div>
+        <div class="stat-val" id="usd-rpnl">—</div>
+        <div class="stat-sub">USD · closed margin trades</div>
+      </div>
+      <div class="card2 p-4">
+        <div class="label-usd">Fees Paid</div>
+        <div class="stat-val" style="color:var(--red)" id="usd-fees">—</div>
+        <div class="stat-sub">Trading · <span id="usd-trades">—</span> trades &nbsp;<span class="muted">Rollover: <span id="usd-rollover">—</span></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHARTS ROW -->
+  <div class="grid grid-cols-2 gap-4 mb-4">
+
+    <!-- INR fee chart -->
+    <div class="card p-5 col-inr">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <div class="label-inr mb-0.5">Daily Fees — INR Account</div>
+          <div class="muted" style="font-size:11px">Fee amounts in ₹ INR</div>
+        </div>
+        <div id="inr-fee-total-label" class="font-mono font-bold" style="color:var(--inr);font-size:15px">—</div>
+      </div>
+      <div style="height:180px;position:relative;">
+        <canvas id="inr-fee-chart"></canvas>
+        <div id="inr-fee-empty" class="empty" style="display:none;position:absolute;inset:0;">No INR fee data in selected period</div>
+      </div>
+    </div>
+
+    <!-- USD fee chart -->
+    <div class="card p-5 col-usd">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <div class="label-usd mb-0.5">Daily Fees — USD Account</div>
+          <div class="muted" style="font-size:11px">Fee amounts in $ USD/USDT</div>
+        </div>
+        <div id="usd-fee-total-label" class="font-mono font-bold" style="color:var(--usd);font-size:15px">—</div>
+      </div>
+      <div style="height:180px;position:relative;">
+        <canvas id="usd-fee-chart"></canvas>
+        <div id="usd-fee-empty" class="empty" style="display:none;position:absolute;inset:0;">No USD fee data in selected period</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOLDINGS ROW -->
+  <div class="grid grid-cols-2 gap-4 mb-4">
+
+    <!-- INR positions -->
+    <div class="card p-5 col-inr">
+      <div class="label-inr mb-3">Open Positions — INR Futures Account</div>
+      <div id="inr-positions">
+        <div class="empty">Loading…</div>
+      </div>
+    </div>
+
+    <!-- USD holdings -->
+    <div class="card p-5 col-usd">
+      <div class="label-usd mb-3">Holdings — USD Account</div>
+      <div id="usd-holdings" style="max-height:220px;overflow-y:auto;">
+        <div class="empty">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRADE HISTORY — TABBED -->
+  <div class="card p-5 mb-4">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex gap-1">
+        <button class="tab-btn active" onclick="switchTab('inr-hist', this)">₹ INR Trades</button>
+        <button class="tab-btn" onclick="switchTab('usd-hist', this)">$ USD Trades</button>
+        <button class="tab-btn" onclick="switchTab('fees-tab', this)">Fee Ledger</button>
+        <button class="tab-btn" onclick="switchTab('orders-tab', this)">Open Orders</button>
+        <button class="tab-btn" onclick="switchTab('pnl-tab', this)">P&amp;L by Asset</button>
+        <button class="tab-btn" onclick="switchTab('prices-tab', this)">Live Prices</button>
+      </div>
+      <div class="flex gap-2 items-center">
+        <select id="side-filter" onchange="refreshTrades()">
+          <option value="all">All Sides</option>
+          <option value="buy">Buy</option>
+          <option value="sell">Sell</option>
+        </select>
+        <span id="tab-count" class="muted" style="font-size:12px"></span>
+      </div>
+    </div>
+
+    <!-- INR Trades -->
+    <div id="tab-inr-hist">
+      <div class="flex justify-between items-center mb-3 p-3 card2">
+        <span class="label-inr">CoinDCX Futures — INR Margin Account</span>
+        <span class="muted" style="font-size:12px">Fees in ₹ · Prices in USDT</span>
+        <div>
+          <span class="muted" style="font-size:12px">Volume: </span>
+          <span id="inr-volume" class="font-mono" style="color:var(--inr);font-size:13px">—</span>
+          <span class="muted" style="font-size:12px"> USDT &nbsp;|&nbsp; Fees: </span>
+          <span id="inr-fee-sum" class="font-mono" style="color:var(--red);font-size:13px">—</span>
+          <span class="muted" style="font-size:12px"> USDT</span>
+        </div>
+      </div>
+      <div style="overflow-x:auto;max-height:400px;overflow-y:auto;">
+        <table>
+          <thead style="position:sticky;top:0;background:var(--surface);">
+            <tr>
+              <th>Time</th><th>Account</th><th>Pair</th><th>Side</th>
+              <th>Price (USDT)</th><th>Qty</th><th>Notional (USDT)</th>
+              <th>Fee (USDT)</th><th>Maker/Taker</th>
+            </tr>
+          </thead>
+          <tbody id="inr-trades-body">
+            <tr><td colspan="9" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- USD Trades -->
+    <div id="tab-usd-hist" style="display:none">
+      <div class="flex justify-between items-center mb-3 p-3 card2">
+        <span class="label-usd">Kraken Margin + CoinDCX Spot — USD/USDT Account</span>
+        <div>
+          <span class="muted" style="font-size:12px">Volume: </span>
+          <span id="usd-volume" class="font-mono" style="color:var(--usd);font-size:13px">—</span>
+          <span class="muted" style="font-size:12px"> USD &nbsp;|&nbsp; Fees: </span>
+          <span id="usd-fee-sum" class="font-mono" style="color:var(--red);font-size:13px">—</span>
+          <span class="muted" style="font-size:12px"> USD</span>
+        </div>
+      </div>
+      <div style="overflow-x:auto;max-height:400px;overflow-y:auto;">
+        <table>
+          <thead style="position:sticky;top:0;background:var(--surface);">
+            <tr>
+              <th>Time</th><th>Account</th><th>Pair</th><th>Side</th>
+              <th>Price (USD)</th><th>Qty</th><th>Value (USD)</th>
+              <th>Margin (USD)</th><th>Leverage</th>
+              <th>Fee (USD)</th><th>Open/Close</th>
+            </tr>
+          </thead>
+          <tbody id="usd-trades-body">
+            <tr><td colspan="11" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Fee Ledger -->
+    <div id="tab-fees-tab" style="display:none">
+      <div class="grid grid-cols-2 gap-4">
+        <!-- INR fees breakdown -->
+        <div>
+          <div class="label-inr mb-3">INR Account — Fees by Asset</div>
+          <div class="muted mb-2" style="font-size:11px">Fees charged in USDT (instrument settlement currency)</div>
+          <table>
+            <thead><tr><th>Asset</th><th>Fees (USDT)</th></tr></thead>
+            <tbody id="inr-fee-asset-body">
+              <tr><td colspan="2" class="empty">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- USD fees breakdown -->
+        <div>
+          <div class="label-usd mb-3">USD Account — Fees by Asset + Funding Rates</div>
+          <table>
+            <thead><tr><th>Asset / Type</th><th>Fees (USD $)</th></tr></thead>
+            <tbody id="usd-fee-asset-body">
+              <tr><td colspan="2" class="empty">Loading…</td></tr>
+            </tbody>
+          </table>
+          <div class="divider"></div>
+          <div class="label-usd mb-2">Kraken Funding / Rollover Ledger</div>
+          <div style="max-height:200px;overflow-y:auto;">
+            <table>
+              <thead><tr><th>Time</th><th>Type</th><th>Asset</th><th>Fee ($)</th></tr></thead>
+              <tbody id="kraken-ledger-body">
+                <tr><td colspan="4" class="empty">No funding entries</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Open Orders -->
+    <div id="tab-orders-tab" style="display:none">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="label-inr mb-3">INR Account — Open Orders</div>
+          <table>
+            <thead><tr><th>Pair</th><th>Side</th><th>Price</th><th>Qty</th><th>Status</th></tr></thead>
+            <tbody id="inr-orders-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div>
+          <div class="label-usd mb-3">USD Account — Open Orders</div>
+          <table>
+            <thead><tr><th>Account</th><th>Pair</th><th>Side</th><th>Price</th><th>Qty</th></tr></thead>
+          <tbody id="usd-orders-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- P&L by Asset -->
+    <div id="tab-pnl-tab" style="display:none">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="label-inr mb-3">INR Account — P&amp;L by Asset</div>
+          <div class="muted mb-2" style="font-size:11px">Cash-flow P&amp;L in USDT · Open position MTM at live price · Fees in ₹ INR</div>
+          <table>
+            <thead><tr><th>Asset</th><th>Realized (USDT)</th><th>Unrealized (USDT)</th><th>Total (USDT)</th><th>Fees (USDT)</th></tr></thead>
+            <tbody id="inr-pnl-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div>
+          <div class="label-usd mb-3">USD Account — P&amp;L by Asset</div>
+          <div class="muted mb-2" style="font-size:11px">All amounts in USD/USDT</div>
+          <table>
+            <thead><tr><th>Asset</th><th>Realized ($)</th><th>Unrealized ($)</th><th>Fees ($)</th></tr></thead>
+            <tbody id="usd-pnl-body"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Prices -->
+    <div id="tab-prices-tab" style="display:none">
+      <table>
+        <thead><tr><th>Asset</th><th>Kraken (USD)</th><th>CoinDCX (USDT)</th><th>Spread</th><th>Opportunity</th></tr></thead>
+        <tbody id="prices-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+
+  </div><!-- /card -->
+</div>
+
+<script>
+// ─── Formatters ───────────────────────────────────────────────────────────────
+const fmtUSD = (n, d=2) => {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  const sign = n < 0 ? '-' : '';
+  return sign + '$' + Math.abs(n).toFixed(d);
+};
+// CoinDCX futures P&L: instruments priced in USDT, not USD — show as USDT
+const fmtUSDT = (n, d=2) => {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  const sign = n < 0 ? '-' : '';
+  return sign + Math.abs(n).toFixed(d) + ' USDT';
+};
+const fmtINR = (n, d=2) => {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  const sign = n < 0 ? '-' : '';
+  return sign + '₹' + Math.abs(n).toFixed(d);
+};
+const fmtN = (n, d=6) => {
+  if (n === null || isNaN(n)) return '—';
+  return parseFloat(n).toFixed(d).replace(/\.?0+$/, '');
+};
+const pnlClass = n => n > 0 ? 'pos' : n < 0 ? 'neg' : 'muted';
+const pnlPfx = n => n > 0 ? '+' : '';
+
+// ─── Chart helpers ────────────────────────────────────────────────────────────
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#21262d';
+let inrFeeChart = null, usdFeeChart = null;
+
+function buildBarChart(canvasId, labels, values, color, emptyId) {
+  const ctx = document.getElementById(canvasId);
+  const hasData = values.some(v => v > 0);
+  document.getElementById(emptyId).style.display = hasData ? 'none' : 'flex';
+  if (!hasData) {
+    const existing = Chart.getChart(ctx);
+    if (existing) existing.destroy();
+    return null;
+  }
+  const existing = Chart.getChart(ctx);
+  if (existing) existing.destroy();
+  return new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data: values, backgroundColor: color + '55', borderColor: color, borderWidth: 1, borderRadius: 3 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y.toFixed(4) } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 10, font: { size: 10 } } },
+        y: { grid: { color: '#21262d' }, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+// ─── Fetch helpers ────────────────────────────────────────────────────────────
+let tradesData = { usd: { trades:[], count:0 }, inr: { trades:[], count:0 } };
+let pnlData = null, feeData = null, currentTab = 'inr-hist';
+
+async function fetchSummary() {
+  try {
+    const r = await fetch('/api/summary');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    const inr = d.inr, usd = d.usd;
+
+    // helper — never crashes on missing element
+    const set = (id, text, cls) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = text;
+      if (cls) el.className = cls;
+    };
+    const pnlText = (v, fmt) => (v >= 0 ? '+' : '') + fmt(v);
+
+    // ── INR account ──
+    const np = inr.net_pnl_usdt;
+    set('inr-netpnl', pnlText(np, fmtUSDT), 'stat-val ' + pnlClass(np));
+
+    const rp = inr.realized_pnl_usdt;
+    set('inr-rpnl', pnlText(rp, fmtUSDT), 'stat-val ' + pnlClass(rp));
+
+    const up = inr.unrealized_pnl_usdt;
+    set('inr-upnl', pnlText(up, fmtUSDT), 'stat-val ' + pnlClass(up));
+
+    set('inr-fees', fmtUSDT(inr.total_fees_usdt, 2));
+    set('inr-trades', inr.trade_count);
+    set('inr-margin', fmtINR(inr.locked_margin_inr));
+
+    // ── USD account ──
+    set('usd-value', fmtUSD(usd.portfolio_value));
+    const rpu = usd.realized_pnl;
+    set('usd-rpnl', pnlText(rpu, fmtUSD), 'stat-val ' + pnlClass(rpu));
+    set('usd-fees', fmtUSD(usd.total_fees, 2));
+    set('usd-trades', usd.trade_count);
+
+    const km = usd.kraken_margin || {};
+    const subEl = document.getElementById('usd-margin-detail');
+    if (subEl && km.equity) {
+      subEl.innerHTML = `Equity: <strong style="color:var(--usd)">${fmtUSD(km.equity)}</strong> &nbsp;·&nbsp; Free: <strong>${fmtUSD(km.free_margin)}</strong> &nbsp;·&nbsp; In use: <strong style="color:var(--yellow)">${fmtUSD(km.margin_in_use)}</strong> &nbsp;·&nbsp; uPnL: <strong class="${pnlClass(km.unrealized_pnl)}">${fmtUSD(km.unrealized_pnl)}</strong>`;
+    }
+    const rfEl = document.getElementById('usd-rollover');
+    if (rfEl) rfEl.textContent = fmtUSD(usd.rollover_fees, 4);
+
+    document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    console.error('fetchSummary:', e.message);
+  }
+}
+
+async function fetchPortfolio() {
+  try {
+  const r = await fetch('/api/portfolio');
+
+  const d = await r.json();
+
+  // INR — futures positions
+  const posEl = document.getElementById('inr-positions');
+  const pos = d.inr?.positions || [];
+  const activePos = pos.filter(p => p.quantity !== 0);
+  if (!activePos.length) {
+    posEl.innerHTML = '<div class="empty">No open futures positions</div>';
+  } else {
+    posEl.innerHTML = `<table><thead><tr><th>Pair</th><th>Qty</th><th>Entry (USDT)</th><th>Current (USDT)</th><th>Liq. Price</th><th>PnL (USDT)</th><th>Leverage</th><th>Margin (INR)</th></tr></thead><tbody>` +
+      activePos.map(p => {
+        const pnl = p.unrealized_pnl_usdt;
+        return `<tr>
+          <td class="font-mono" style="color:var(--inr)">${p.pair}</td>
+          <td class="font-mono">${fmtN(p.quantity, 4)}</td>
+          <td class="font-mono">${fmtUSDT(p.avg_entry_price, 4)}</td>
+          <td class="font-mono">${fmtUSDT(p.current_price_usdt, 4)}</td>
+          <td class="font-mono" style="color:var(--red)">${fmtUSDT(p.liquidation_price, 4)}</td>
+          <td class="font-mono ${pnlClass(pnl)}">${pnlPfx(pnl)}${fmtUSDT(pnl, 4)}</td>
+          <td class="muted">${p.leverage}x</td>
+          <td class="font-mono" style="color:var(--inr)">${fmtINR(p.locked_margin_inr)}</td>
+        </tr>`;
+      }).join('') + '</tbody></table>';
+  }
+
+  // USD — holdings
+  const holdEl = document.getElementById('usd-holdings');
+  const holdings = d.usd?.holdings || [];
+  if (!holdings.length) {
+    holdEl.innerHTML = '<div class="empty">No USD holdings found</div>';
+  } else {
+    holdEl.innerHTML = holdings.map(h => `
+      <div class="flex items-center justify-between py-2" style="border-bottom:1px solid rgba(33,38,45,.5)">
+        <div class="flex items-center gap-2">
+          <div style="width:26px;height:26px;border-radius:7px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--usd)">${h.asset.slice(0,3)}</div>
+          <div>
+            <div style="font-size:13px;font-weight:600">${h.asset}</div>
+            <span class="badge ${h.account === 'Kraken' ? 'b-kraken' : 'b-spot'}">${h.account}</span>
+          </div>
+        </div>
+        <div class="text-right">
+          <div class="font-mono font-semibold">${fmtUSD(h.value)}</div>
+          <div class="muted" style="font-size:11px">${fmtN(h.quantity, 4)} ${h.asset} @ ${fmtUSD(h.price, 4)}</div>
+        </div>
+      </div>`).join('');
+  }
+  } catch (e) { console.error('fetchPortfolio:', e.message); }
+}
+
+async function fetchTrades() {
+  try {
+  const days = document.getElementById('days-select').value;
+  const side = document.getElementById('side-filter').value;
+  const r = await fetch(`/api/trades?days=${days}&side=${side}`);
+
+  const d = await r.json();
+  tradesData = d;
+
+  // INR trades table
+  document.getElementById('inr-volume').textContent = fmtN(d.inr.total_volume_usdt, 2);
+  document.getElementById('inr-fee-sum').textContent = fmtN(d.inr.total_fees_usdt, 2);
+  const inrBody = document.getElementById('inr-trades-body');
+  if (!d.inr.trades.length) {
+    inrBody.innerHTML = `<tr><td colspan="9" class="empty">No INR futures trades in selected period</td></tr>`;
+  } else {
+    inrBody.innerHTML = d.inr.trades.map(t => `<tr>
+      <td class="muted" style="white-space:nowrap;font-size:11px">${t.datetime}</td>
+      <td><span class="badge b-fut">Futures</span></td>
+      <td class="font-mono" style="color:var(--inr)">${t.pair}</td>
+      <td><span class="badge ${t.side === 'buy' ? 'buy' : 'sell'}">${t.side.toUpperCase()}</span></td>
+      <td class="font-mono">${fmtN(t.price, 4)}</td>
+      <td class="font-mono">${fmtN(t.quantity, 4)}</td>
+      <td class="font-mono">${fmtN(t.volume, 2)}</td>
+      <td class="font-mono" style="color:var(--red)">${fmtUSDT(t.fee, 4)}</td>
+      <td><span class="${t.is_maker ? 'maker' : 'taker'}">${t.is_maker ? 'maker' : 'taker'}</span></td>
+    </tr>`).join('');
+  }
+
+  // USD trades table
+  document.getElementById('usd-volume').textContent = fmtN(d.usd.total_volume, 2);
+  document.getElementById('usd-fee-sum').textContent = fmtN(d.usd.total_fees, 4);
+  const usdBody = document.getElementById('usd-trades-body');
+  if (!d.usd.trades.length) {
+    usdBody.innerHTML = `<tr><td colspan="11" class="empty">No USD trades in selected period</td></tr>`;
+  } else {
+    usdBody.innerHTML = d.usd.trades.map(t => {
+      const isMargin = t.account === 'Kraken Margin';
+      const acctClass = isMargin ? 'b-kraken' : 'b-spot';
+      const openClose = t.is_opening ? '<span style="color:var(--green);font-size:10px">▲ open</span>'
+                      : t.is_closing ? '<span style="color:var(--red);font-size:10px">▼ close</span>'
+                      : '<span class="muted" style="font-size:10px">—</span>';
+      return `<tr>
+        <td class="muted" style="white-space:nowrap;font-size:11px">${t.datetime}</td>
+        <td><span class="badge ${acctClass}">${t.account}</span></td>
+        <td class="font-mono">${t.pair}</td>
+        <td><span class="badge ${t.side === 'buy' ? 'buy' : 'sell'}">${t.side.toUpperCase()}</span></td>
+        <td class="font-mono">${fmtUSD(t.price, 2)}</td>
+        <td class="font-mono">${fmtN(t.quantity, 6)}</td>
+        <td class="font-mono font-semibold">${fmtUSD(t.volume)}</td>
+        <td class="font-mono" style="color:var(--yellow)">${t.margin ? fmtUSD(t.margin) : '—'}</td>
+        <td class="muted" style="font-size:11px">${t.leverage ? t.leverage + 'x' : '—'}</td>
+        <td class="font-mono" style="color:var(--red)">${fmtUSD(t.fee, 4)}</td>
+        <td>${openClose}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  updateTabCount();
+  } catch (e) { console.error('fetchTrades:', e.message); }
+}
+
+async function fetchPnl() {
+  try {
+  const days = document.getElementById('days-select').value;
+  const r = await fetch(`/api/pnl?days=${days}`);
+
+  pnlData = await r.json();
+
+  // INR P&L table
+  const inrAssets = Object.keys(pnlData.inr.by_asset || {});
+  document.getElementById('inr-pnl-body').innerHTML = inrAssets.length
+    ? inrAssets.sort().map(a => {
+        const ad = pnlData.inr.by_asset[a];
+        const total = ad.total_usdt;
+        return `<tr>
+          <td class="font-semibold">${a}</td>
+          <td class="font-mono ${pnlClass(ad.realized_usdt)}">${pnlPfx(ad.realized_usdt)}${fmtUSDT(ad.realized_usdt)}</td>
+          <td class="font-mono ${pnlClass(ad.unrealized_usdt)}">${pnlPfx(ad.unrealized_usdt)}${fmtUSDT(ad.unrealized_usdt)}</td>
+          <td class="font-mono font-bold ${pnlClass(total)}">${pnlPfx(total)}${fmtUSDT(total)}</td>
+          <td class="font-mono" style="color:var(--red)">${fmtUSDT(ad.fees_usdt, 4)}</td>
+        </tr>`;
+      }).join('')
+    : '<tr><td colspan="5" class="empty">No INR trade history yet</td></tr>';
+
+  // USD P&L table
+  const usdAssets = Object.keys(pnlData.usd.by_asset || {});
+  document.getElementById('usd-pnl-body').innerHTML = usdAssets.length
+    ? usdAssets.map(a => {
+        const ad = pnlData.usd.by_asset[a];
+        const total = ad.realized + ad.unrealized;
+        return `<tr>
+          <td class="font-semibold">${a}</td>
+          <td class="font-mono ${pnlClass(ad.realized)}">${pnlPfx(ad.realized)}${fmtUSD(ad.realized)}</td>
+          <td class="font-mono ${pnlClass(ad.unrealized)}">${pnlPfx(ad.unrealized)}${fmtUSD(ad.unrealized)}</td>
+          <td class="font-mono" style="color:var(--red)">${fmtUSD(ad.fees_usd, 4)}</td>
+        </tr>`;
+      }).join('')
+    : '<tr><td colspan="4" class="empty">No USD trade history yet</td></tr>';
+  } catch (e) { console.error('fetchPnl:', e.message); }
+}
+
+async function fetchFees() {
+  try {
+  const days = document.getElementById('days-select').value;
+  const r = await fetch(`/api/fees?days=${days}`);
+
+  feeData = await r.json();
+
+  // INR fee chart & totals
+  const ic = feeData.inr.chart;
+  document.getElementById('inr-fee-total-label').textContent = fmtUSDT(feeData.inr.total_fees_usdt, 2);
+  inrFeeChart = buildBarChart('inr-fee-chart', ic.labels, ic.daily, '#f0a500', 'inr-fee-empty');
+
+  // INR account fee by asset (in USDT)
+  const inrAssets = feeData.inr.by_asset || {};
+  document.getElementById('inr-fee-asset-body').innerHTML = Object.keys(inrAssets).length
+    ? Object.entries(inrAssets).sort((a,b) => b[1]-a[1]).map(([asset, fee]) =>
+        `<tr><td class="font-semibold">${asset}</td><td class="font-mono" style="color:var(--red)">${fmtUSDT(fee, 4)}</td></tr>`
+      ).join('')
+    : '<tr><td colspan="2" class="empty">No data</td></tr>';
+
+  // USD fee chart & totals
+  const uc = feeData.usd.chart;
+  document.getElementById('usd-fee-total-label').textContent = fmtUSD(feeData.usd.total_fees, 4);
+  usdFeeChart = buildBarChart('usd-fee-chart', uc.labels, uc.daily, '#3b82f6', 'usd-fee-empty');
+
+  // USD fee by asset + Kraken breakdown
+  const usdRows = [];
+  usdRows.push(`<tr><td class="muted">Kraken Trading</td><td class="font-mono">${fmtUSD(feeData.usd.kraken.trading_fees, 4)}</td></tr>`);
+  usdRows.push(`<tr><td class="muted">Kraken Funding</td><td class="font-mono">${fmtUSD(feeData.usd.kraken.funding_rates, 4)}</td></tr>`);
+  usdRows.push(`<tr><td class="muted">DCX Spot</td><td class="font-mono">${fmtUSD(feeData.usd.dcx_spot?.trading_fees, 4)}</td></tr>`);
+  Object.entries(feeData.usd.by_asset || {}).sort((a,b) => b[1]-a[1]).forEach(([asset, fee]) => {
+    usdRows.push(`<tr><td class="font-semibold">${asset}</td><td class="font-mono" style="color:var(--usd)">${fmtUSD(fee, 4)}</td></tr>`);
+  });
+  document.getElementById('usd-fee-asset-body').innerHTML = usdRows.join('') || '<tr><td colspan="2" class="empty">No data</td></tr>';
+
+  // Kraken ledger
+  const ledger = feeData.usd.ledger || [];
+  document.getElementById('kraken-ledger-body').innerHTML = ledger.length
+    ? ledger.map(l => `<tr>
+        <td class="muted" style="font-size:11px">${l.datetime}</td>
+        <td style="text-transform:capitalize;font-size:11px">${l.type}</td>
+        <td class="font-mono">${l.asset}</td>
+        <td class="font-mono" style="color:var(--red)">${fmtUSD(l.fee, 6)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="4" class="empty">No funding entries</td></tr>';
+  } catch (e) { console.error('fetchFees:', e.message); }
+}
+
+async function fetchOrders() {
+  try {
+  const r = await fetch('/api/open-orders');
+
+  const d = await r.json();
+
+  document.getElementById('inr-orders-body').innerHTML = d.inr.count
+    ? d.inr.orders.map(o => `<tr>
+        <td class="font-mono" style="color:var(--inr)">${o.pair}</td>
+        <td><span class="badge ${o.side === 'buy' ? 'buy' : 'sell'}">${(o.side||'').toUpperCase()}</span></td>
+        <td class="font-mono">${fmtN(o.price, 4)}</td>
+        <td class="font-mono">${fmtN(o.quantity, 4)}</td>
+        <td class="muted" style="font-size:11px">${o.status}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="5" class="empty">No open INR futures orders</td></tr>';
+
+  document.getElementById('usd-orders-body').innerHTML = d.usd.count
+    ? d.usd.orders.map(o => `<tr>
+        <td><span class="badge ${o.account === 'Kraken' ? 'b-kraken' : 'b-spot'}">${o.account}</span></td>
+        <td class="font-mono">${o.pair}</td>
+        <td><span class="badge ${o.side === 'buy' ? 'buy' : 'sell'}">${(o.side||'').toUpperCase()}</span></td>
+        <td class="font-mono">${fmtUSD(o.price, 4)}</td>
+        <td class="font-mono">${fmtN(o.quantity, 4)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="5" class="empty">No open USD orders</td></tr>';
+  } catch (e) { console.error('fetchOrders:', e.message); }
+}
+
+async function fetchPrices() {
+  try {
+  const r = await fetch('/api/prices');
+
+  const d = await r.json();
+  document.getElementById('prices-body').innerHTML = Object.entries(d.prices).map(([asset, p]) => {
+    const spread = p.spread;
+    const arb = spread && spread > 0.5;
+    const pct = p.kraken_usd && p.coindcx_usdt ? (spread / p.kraken_usd * 100).toFixed(3) : null;
+    return `<tr>
+      <td class="font-semibold">${asset}</td>
+      <td class="font-mono">${p.kraken_usd ? fmtUSD(p.kraken_usd) : '<span class="muted">—</span>'}</td>
+      <td class="font-mono">${p.coindcx_usdt ? fmtUSD(p.coindcx_usdt) : '<span class="muted">—</span>'}</td>
+      <td class="font-mono ${arb ? 'pos' : 'muted'}">${spread != null ? fmtUSD(spread) : '—'}</td>
+      <td>${arb ? `<span style="color:var(--green);background:rgba(63,185,80,.1);padding:2px 8px;border-radius:4px;font-size:11px">+${pct}% arb</span>` : '<span class="muted">—</span>'}</td>
+    </tr>`;
+  }).join('');
+  } catch (e) { console.error('fetchPrices:', e.message); }
+}
+
+// ─── UI ───────────────────────────────────────────────────────────────────────
+function switchTab(tab, btn) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ['inr-hist','usd-hist','fees-tab','orders-tab','pnl-tab','prices-tab'].forEach(t => {
+    document.getElementById(`tab-${t}`).style.display = t === tab ? '' : 'none';
+  });
+  updateTabCount();
+}
+
+function updateTabCount() {
+  const counts = {
+    'inr-hist': `${tradesData.inr?.count || 0} INR trades`,
+    'usd-hist': `${tradesData.usd?.count || 0} USD trades`,
+  };
+  document.getElementById('tab-count').textContent = counts[currentTab] || '';
+}
+
+function refreshTrades() { fetchTrades(); }
+
+async function refreshAll() {
+  const icon = document.getElementById('refresh-icon');
+  icon.classList.add('spinning');
+  // Fire all in parallel — server-side cache + background warmer keeps them fast.
+  // Each fetch has its own try/catch so one failure doesn't block others.
+  await Promise.allSettled([
+    fetchSummary(), fetchPortfolio(), fetchTrades(),
+    fetchPnl(), fetchFees(), fetchOrders(), fetchPrices()
+  ]);
+  setTimeout(() => icon.classList.remove('spinning'), 500);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('last-updated').textContent = 'Loading…';
+  refreshAll();
+  // Auto-refresh every 90s — background warmer keeps server cache fresh every 90s
+  setInterval(refreshAll, 90000);
+});
+</script>
+</body>
+</html>

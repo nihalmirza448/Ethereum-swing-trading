@@ -1,5 +1,11 @@
 # Environment variables
 .env
+.env.*
+*.env
+.envrc
+secrets.json
+secrets.yaml
+secrets.yml
 
 # Data files
 data/
